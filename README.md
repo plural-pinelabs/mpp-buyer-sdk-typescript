@@ -1,13 +1,13 @@
-# @plural/mpp-buyer-sdk
+# @pinelabs-online/mpp-buyer-sdk
 
-TypeScript SDK for Plural MPP buyer agents. It handles x402-style HTTP `402`
+TypeScript SDK for Pinelabs-online MPP buyer agents. It handles x402-style HTTP `402`
 payment challenges, creates one-time MPP payment tokens, retries protected
 requests with a `Payment` credential, and parses `Payment-Receipt` headers.
 
 ## Install
 
 ```bash
-npm install @plural/mpp-buyer-sdk
+npm install @pinelabs-online/mpp-buyer-sdk
 ```
 
 Requires Node.js `>=18` or another runtime with `fetch`, `AbortSignal.timeout`,
@@ -18,12 +18,12 @@ and standard Web APIs.
 The SDK is split into small modules and exposed through npm subpath exports:
 
 ```ts
-import { PluralBuyer } from "@plural/mpp-buyer-sdk";
-import { PluralBuyer as Client } from "@plural/mpp-buyer-sdk/client";
-import { MppEnvironment } from "@plural/mpp-buyer-sdk/config";
-import { GrantVerifier } from "@plural/mpp-buyer-sdk/grantex";
-import type { PluralBuyerConfig, Receipt } from "@plural/mpp-buyer-sdk/types";
-import { decodeReceipt } from "@plural/mpp-buyer-sdk/utils";
+import { pinelabs-onlineBuyer } from "@pinelabs-online/mpp-buyer-sdk";
+import { pinelabs-onlineBuyer as Client } from "@pinelabs-online/mpp-buyer-sdk/client";
+import { MppEnvironment } from "@pinelabs-online/mpp-buyer-sdk/config";
+import { GrantVerifier } from "@pinelabs-online/mpp-buyer-sdk/grantex";
+import type { pinelabs-onlineBuyerConfig, Receipt } from "@pinelabs-online/mpp-buyer-sdk/types";
+import { decodeReceipt } from "@pinelabs-online/mpp-buyer-sdk/utils";
 ```
 
 Use the root import for most applications. Use subpath imports when building
@@ -32,9 +32,9 @@ larger services that want clearer ownership boundaries.
 ## Quick Start
 
 ```ts
-import { MppEnvironment, PluralBuyer } from "@plural/mpp-buyer-sdk";
+import { MppEnvironment, pinelabs-onlineBuyer } from "@pinelabs-online/mpp-buyer-sdk";
 
-const buyer = PluralBuyer.create({
+const buyer = pinelabs-onlineBuyer.create({
   clientId: "buyer-client-id",
   clientSecret: "buyer-client-secret",
   customerReference: "customer-ref",
@@ -48,9 +48,9 @@ console.log(await response.json());
 ## Configuration
 
 ```ts
-const buyer = PluralBuyer.create({
-  clientId: process.env.PLURAL_CLIENT_ID!,
-  clientSecret: process.env.PLURAL_CLIENT_SECRET!,
+const buyer = pinelabs-onlineBuyer.create({
+  clientId: process.env.pinelabs-online_CLIENT_ID!,
+  clientSecret: process.env.pinelabs-online_CLIENT_SECRET!,
   customerReference: "customer-ref",
   baseUrl: MppEnvironment.SANDBOX,
   requestTimeoutMs: 30_000,
@@ -61,7 +61,7 @@ const buyer = PluralBuyer.create({
 });
 ```
 
-`baseUrl` is the Plural MPP base URL. Authentication always uses
+`baseUrl` is the pinelabs-online MPP base URL. Authentication always uses
 `POST /api/auth/v1/token`; the same base URL can route that call internally to
 your central Keycloak-backed auth service.
 
