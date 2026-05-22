@@ -77,86 +77,6 @@ export interface TokenDefaults {
   ttlSeconds?: number;
 }
 
-/** JWKS endpoint configuration used to verify Grantex RS256 grant tokens. */
-export interface JwksConfig {
-  /** JWKS endpoint or base Grantex URL. Base URLs are normalized to `/.well-known/jwks.json`. */
-  jwksUrl: string;
-  /** How long fetched JWKS keys remain cached in memory. Defaults to one hour. */
-  cacheTtlMs?: number;
-}
-
-/** Verified Grantex JWT claims used for buyer-side payment authorization decisions. */
-export interface GrantTokenClaims {
-  iss: string;
-  sub: string;
-  agt: string;
-  scp: string[];
-  grnt: string;
-  iat: number;
-  exp: number;
-  dev?: string;
-  nbf?: number;
-  parentAgt?: string;
-  parentGrnt?: string;
-  delegationDepth?: number;
-  raw: Record<string, unknown>;
-}
-
-/** Parsed representation of a colon-delimited Grantex scope. */
-export interface ParsedScope {
-  resource: string;
-  action: string;
-  constraint?: string;
-}
-
-/** Payment spend limit extracted from a Grantex scope constraint. */
-export interface SpendingLimit {
-  maxAmountPaise: number;
-  currency: string;
-}
-
-/** Result of verifying a Grantex grant token. */
-export interface GrantVerificationResult {
-  valid: boolean;
-  claims?: GrantTokenClaims;
-  error?: string;
-}
-
-/** Context passed to `onGrantDenied` callbacks. */
-export interface GrantDeniedContext {
-  grantId: string;
-  agentId: string;
-  requestedAmount?: number;
-  requestedResource?: string;
-  scopeViolation?: string;
-}
-
-/** Audit event emitted by buyer-side Grantex hooks. */
-export interface GrantAuditEvent {
-  timestamp: string;
-  action: string;
-  grantId: string;
-  agentId: string;
-  userId: string;
-  details: Record<string, unknown>;
-}
-
-/** Buyer-side Grantex authorization settings. */
-export interface GrantexConfig {
-  /** RS256 grant token delegated to this buyer agent. */
-  grantToken: string;
-  /** JWKS settings used to verify the grant token signature. */
-  jwks: JwksConfig;
-  /** Expected Grantex agent id (`agt` claim). When set, mismatches are rejected. */
-  agentId?: string;
-  /** Whether the buyer SDK enforces grant spend limits before retrying a 402 request. */
-  enforceSpendingLimits?: boolean;
-  /** Callback invoked when grant verification or payment authorization fails. */
-  onGrantDenied?: (reason: string, context: GrantDeniedContext) => void | Promise<void>;
-  /** Callback invoked for buyer-side grant audit events. */
-  onAuditEvent?: (event: GrantAuditEvent) => void | Promise<void>;
-}
-
 /** Configuration required to construct a buyer SDK instance. */
 export interface PluralBuyerConfig {
   /** Client id used for `POST /api/auth/v1/token` unless `accessToken` is supplied. */
@@ -187,8 +107,6 @@ export interface PluralBuyerConfig {
   initialRetryDelayMs?: number;
   /** Optional logger for request, retry, auth, and payment diagnostics. */
   logger?: MppLogger;
-  /** Optional buyer-side Grantex grant verification and spend enforcement settings. */
-  grantex?: GrantexConfig;
   /** Pre-issued bearer token. When supplied, the SDK skips client-credential exchange. */
   accessToken?: string;
   /** Custom fetch implementation for tests or non-standard runtimes. */

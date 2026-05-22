@@ -7,12 +7,10 @@ test("buyer package exposes modular entry points", async () => {
   const types = await import("../dist/types/index.js");
   const utils = await import("../dist/utils/index.js");
   const config = await import("../dist/config/index.js");
-  const grantex = await import("../dist/grantex/index.js");
 
   assert.equal(typeof root.PluralBuyer.create, "function");
   assert.equal(client.PluralBuyer, root.PluralBuyer);
   assert.equal(typeof utils.decodeChallenge, "function");
-  assert.equal(grantex.GrantVerifier, root.GrantVerifier);
   assert.equal(config.MppEnvironment.PRODUCTION, "https://api.pluralpay.in");
   assert.equal(types.PAYMENT_HEADER_PREFIX, "Payment ");
 });

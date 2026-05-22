@@ -93,7 +93,7 @@ export function validateChallenge(challenge: Challenge): void {
   }
 }
 
-/** Return the challenge amount in paise for limit checks and token creation. */
+/** Return the challenge amount in paise for token creation. */
 export function extractAmountPaise(challenge: Challenge): number {
   const majorUnits = Number(challenge.request.amount);
   if (!Number.isFinite(majorUnits) || majorUnits <= 0) {

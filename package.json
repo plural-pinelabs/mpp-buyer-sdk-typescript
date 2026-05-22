@@ -42,11 +42,6 @@
       "require": "./dist/config/index.js",
       "default": "./dist/config/index.js"
     },
-    "./grantex": {
-      "types": "./dist/grantex/index.d.ts",
-      "require": "./dist/grantex/index.js",
-      "default": "./dist/grantex/index.js"
-    },
     "./types": {
       "types": "./dist/types/index.d.ts",
       "require": "./dist/types/index.js",
