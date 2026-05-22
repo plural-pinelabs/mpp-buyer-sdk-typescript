@@ -1,13 +1,13 @@
-# @pinelabs-online/mpp-buyer-sdk
+# @pinelabs-online/mpp-client-sdk
 
-TypeScript SDK for Pinelabs-online MPP buyer agents. It handles x402-style HTTP `402`
+TypeScript SDK for Pinelabs-online MPP client agents. It handles x402-style HTTP `402`
 payment challenges, creates one-time MPP payment tokens, retries protected
 requests with a `Payment` credential, and parses `Payment-Receipt` headers.
 
 ## Install
 
 ```bash
-npm install @pinelabs-online/mpp-buyer-sdk
+npm install @pinelabs-online/mpp-client-sdk
 ```
 
 Requires Node.js `>=18` or another runtime with `fetch`, `AbortSignal.timeout`,
@@ -18,12 +18,12 @@ and standard Web APIs.
 The SDK is split into small modules and exposed through npm subpath exports:
 
 ```ts
-import { pinelabs-onlineBuyer } from "@pinelabs-online/mpp-buyer-sdk";
-import { pinelabs-onlineBuyer as Client } from "@pinelabs-online/mpp-buyer-sdk/client";
-import { MppEnvironment } from "@pinelabs-online/mpp-buyer-sdk/config";
-import { GrantVerifier } from "@pinelabs-online/mpp-buyer-sdk/grantex";
-import type { pinelabs-onlineBuyerConfig, Receipt } from "@pinelabs-online/mpp-buyer-sdk/types";
-import { decodeReceipt } from "@pinelabs-online/mpp-buyer-sdk/utils";
+import { pinelabs-onlineclient } from "@pinelabs-online/mpp-client-sdk";
+import { pinelabs-onlineclient as Client } from "@pinelabs-online/mpp-client-sdk/client";
+import { MppEnvironment } from "@pinelabs-online/mpp-client-sdk/config";
+import { GrantVerifier } from "@pinelabs-online/mpp-client-sdk/grantex";
+import type { pinelabs-onlineclientConfig, Receipt } from "@pinelabs-online/mpp-client-sdk/types";
+import { decodeReceipt } from "@pinelabs-online/mpp-client-sdk/utils";
 ```
 
 Use the root import for most applications. Use subpath imports when building
@@ -32,23 +32,23 @@ larger services that want clearer ownership boundaries.
 ## Quick Start
 
 ```ts
-import { MppEnvironment, pinelabs-onlineBuyer } from "@pinelabs-online/mpp-buyer-sdk";
+import { MppEnvironment, pinelabs-onlineclient } from "@pinelabs-online/mpp-client-sdk";
 
-const buyer = pinelabs-onlineBuyer.create({
-  clientId: "buyer-client-id",
-  clientSecret: "buyer-client-secret",
+const client = pinelabs-onlineclient.create({
+  clientId: "client-client-id",
+  clientSecret: "client-client-secret",
   customerReference: "customer-ref",
   baseUrl: MppEnvironment.SANDBOX,
 });
 
-const response = await buyer.get("https://seller.example.com/api/premium");
+const response = await client.get("https://seller.example.com/api/premium");
 console.log(await response.json());
 ```
 
 ## Configuration
 
 ```ts
-const buyer = pinelabs-onlineBuyer.create({
+const client = pinelabs-onlineclient.create({
   clientId: process.env.pinelabs-online_CLIENT_ID!,
   clientSecret: process.env.pinelabs-online_CLIENT_SECRET!,
   customerReference: "customer-ref",
@@ -73,7 +73,7 @@ paid request.
 
 ## Flow
 
-1. Your app calls `buyer.get(...)`, `buyer.post(...)`, or `buyer.request(...)`.
+1. Your app calls `client.get(...)`, `client.post(...)`, or `client.request(...)`.
 2. If the seller returns `402` with `WWW-Authenticate: Payment <challenge>`,
    the SDK decodes and validates the challenge.
 3. The SDK authenticates with `POST /api/auth/v1/token`.
@@ -86,14 +86,14 @@ paid request.
 ## Direct MPP APIs
 
 ```ts
-await buyer.methods.createMandate({
+await client.methods.createMandate({
   mobileNumber: "+919876543210",
   amount: { value: 50000, currency: "INR" },
   customerReference: "customer-ref",
 });
 
-await buyer.methods.getMandate("authorization-id");
-await buyer.methods.createToken({ customerReference: "customer-ref" });
+await client.methods.getMandate("authorization-id");
+await client.methods.createToken({ customerReference: "customer-ref" });
 ```
 
 ## Development
