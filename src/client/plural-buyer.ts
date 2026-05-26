@@ -5,6 +5,7 @@ import {
   CreateMandateOptions,
   CreateTokenOptions,
   FetchLike,
+  GrantTokenClaims,
   Mandate,
   PluralBuyerConfig,
   Token,
@@ -34,6 +35,8 @@ export class BuyerMethods {
 }
 
 export class PluralBuyerInstance {
+  public grantClaims?: GrantTokenClaims;
+
   constructor(
     private interceptor: FetchInterceptor,
     private httpFetch: FetchLike,
@@ -80,6 +83,13 @@ export class PluralBuyerInstance {
     return this.interceptor.createCredentialForChallenge(challenge);
   }
 
+  /** Verify the configured Grantex grant token and cache its claims. */
+  async verifyGrant(): Promise<GrantTokenClaims | undefined> {
+    const claims = await this.interceptor.verifyGrant();
+    this.grantClaims = claims;
+    return claims;
+  }
+
   close(): void {
     // fetch-backed implementation has no persistent client to close.
   }
@@ -100,5 +110,14 @@ export class PluralBuyer {
     const api = new ApiClient(config, mppBaseUrl, auth, fetchImpl);
     const interceptor = new FetchInterceptor(config, api, fetchImpl);
     return new PluralBuyerInstance(interceptor, fetchImpl, new BuyerMethods(api));
+  }
+
+  /** Create a buyer SDK instance and immediately verify its Grantex grant token. */
+  static async createVerified(config: PluralBuyerConfig): Promise<PluralBuyerInstance> {
+    const instance = PluralBuyer.create(config);
+    if (config.grantex) {
+      await instance.verifyGrant();
+    }
+    return instance;
   }
 }

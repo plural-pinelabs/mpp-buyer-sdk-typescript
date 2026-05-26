@@ -1,23 +1,24 @@
-/** Fetch-compatible function used by the SDK; pass this to run in tests, workers, or custom runtimes. */
+/** Fetch-compatible HTTP function used by the SDK. */
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+/** Prefix used for MPP Payment credentials in HTTP auth headers. */
 export const PAYMENT_HEADER_PREFIX = "Payment ";
 
 /** Logger interface used by SDK internals for retry/auth/payment diagnostics. */
 export interface MppLogger {
-  /** Low-volume diagnostic event, usually before a request or decision. */
+  /** Emit verbose diagnostic information. */
   debug(message: string, context?: Record<string, unknown>): void;
-  /** Informational event such as retries, auth refreshes, and successful responses. */
+  /** Emit informational SDK lifecycle events. */
   info(message: string, context?: Record<string, unknown>): void;
-  /** Error event for failed auth, network, challenge, or payment operations. */
+  /** Emit recoverable and terminal SDK errors. */
   error(message: string, context?: Record<string, unknown>): void;
 }
 
 /** Money amount expressed in the smallest unit for the currency, e.g. paise for INR. */
 export interface Amount {
-  /** Amount in the smallest unit for the currency, e.g. paise for INR. */
+  /** Integer amount in the smallest unit for the currency. */
   value: number;
-  /** ISO-style currency code expected by MPP, e.g. `INR` or `PATHUSD`. */
+  /** ISO 4217 currency code, for example `INR`. */
   currency: string;
 }
 
@@ -71,69 +72,151 @@ export interface Receipt {
 
 /** Optional defaults used when the buyer SDK creates payment tokens automatically. */
 export interface TokenDefaults {
-  /** Optional legacy maximum charge count retained for constructor compatibility. */
+  /** Maximum number of captures allowed against an automatically created token. */
   maxCharges?: number;
-  /** Optional legacy token TTL retained for constructor compatibility; not sent to current `/token`. */
+  /** Token time-to-live in seconds. */
   ttlSeconds?: number;
+}
+
+/** JWKS endpoint configuration used to verify Grantex RS256 grant tokens. */
+export interface JwksConfig {
+  /** JWKS URL or Grantex base URL; base URLs resolve to `/.well-known/jwks.json`. */
+  jwksUrl: string;
+  /** JWKS cache duration in milliseconds. */
+  cacheTtlMs?: number;
+}
+
+/** Verified Grantex JWT claims used for buyer-side payment authorization decisions. */
+export interface GrantTokenClaims {
+  iss: string;
+  sub: string;
+  agt: string;
+  scp: string[];
+  grnt: string;
+  iat: number;
+  exp: number;
+  dev?: string;
+  nbf?: number;
+  parentAgt?: string;
+  parentGrnt?: string;
+  delegationDepth?: number;
+  raw: Record<string, unknown>;
+}
+
+/** Parsed representation of a colon-delimited Grantex scope. */
+export interface ParsedScope {
+  resource: string;
+  action: string;
+  constraint?: string;
+}
+
+/** Payment spend limit extracted from a Grantex scope constraint. */
+export interface SpendingLimit {
+  maxAmountPaise: number;
+  currency: string;
+}
+
+/** Result of verifying a Grantex grant token. */
+export interface GrantVerificationResult {
+  valid: boolean;
+  claims?: GrantTokenClaims;
+  error?: string;
+}
+
+/** Context passed to `onGrantDenied` callbacks. */
+export interface GrantDeniedContext {
+  grantId: string;
+  agentId: string;
+  requestedAmount?: number;
+  requestedResource?: string;
+  scopeViolation?: string;
+}
+
+/** Audit event emitted by buyer-side Grantex hooks. */
+export interface GrantAuditEvent {
+  timestamp: string;
+  action: string;
+  grantId: string;
+  agentId: string;
+  userId: string;
+  details: Record<string, unknown>;
+}
+
+/** Buyer-side Grantex authorization settings. */
+export interface GrantexConfig {
+  /** Grantex grant JWT presented by the buyer agent. */
+  grantToken: string;
+  /** JWKS configuration used to verify the grant token. */
+  jwks: JwksConfig;
+  /** Expected agent id (`agt`) claim. */
+  agentId?: string;
+  /** Whether to enforce spending limits from MPP payment scopes before retrying. */
+  enforceSpendingLimits?: boolean;
+  /** Callback invoked when grant verification or scope checks deny a payment. */
+  onGrantDenied?: (reason: string, context: GrantDeniedContext) => void | Promise<void>;
+  /** Callback invoked for buyer-side Grantex audit events. */
+  onAuditEvent?: (event: GrantAuditEvent) => void | Promise<void>;
 }
 
 /** Configuration required to construct a buyer SDK instance. */
 export interface PluralBuyerConfig {
-  /** Client id used for `POST /api/auth/v1/token` unless `accessToken` is supplied. */
+  /** Pine Labs OAuth client id issued after merchant onboarding. */
   clientId: string;
-  /** Client secret used for `POST /api/auth/v1/token` unless `accessToken` is supplied. */
+  /** Pine Labs OAuth client secret issued with the client id. */
   clientSecret: string;
-  /** Buyer/customer reference sent to `/mpp/v1/token` and embedded in Payment credentials. */
+  /** Stable buyer/customer reference used when creating payment tokens. */
   customerReference?: string;
-  /** Shared base URL used for both auth and MPP service calls when specific base URLs are absent. */
+  /** Base host for both auth and MPP APIs, for example `MppEnvironment.SANDBOX`. */
   baseUrl?: string;
-  /** Optional auth service base URL for `/api/auth/v1/token`. */
+  /** Optional auth host override; omit when it is the same as `baseUrl`. */
   authBaseUrl?: string;
-  /** Optional MPP service base URL for `/mpp/v1/*` calls. */
+  /** Optional MPP host override; omit when it is the same as `baseUrl`. */
   mppBaseUrl?: string;
-  /** Set false to return seller 402 responses without automatic token creation and retry. */
+  /** Whether `buyer.fetch`/`buyer.request` should automatically handle seller 402 challenges. */
   autoHandlePayment?: boolean;
-  /** Callback invoked after a seller Payment challenge is decoded. */
+  /** Callback invoked after a seller 402 challenge is decoded and validated. */
   onChallenge?: (challenge: Challenge) => void | Promise<void>;
-  /** Callback invoked with a decoded `Payment-Receipt` after a successful paid retry. */
+  /** Callback invoked after the final response includes a valid `Payment-Receipt`. */
   onPaymentComplete?: (receipt: Receipt) => void | Promise<void>;
-  /** Legacy defaults retained for compatibility; current `/token` does not require them. */
+  /** Defaults applied when the SDK creates a one-time payment token for a 402 retry. */
   tokenDefaults?: TokenDefaults;
-  /** Per-request timeout in milliseconds. Defaults to 30000. */
+  /** Per-request timeout in milliseconds. */
   requestTimeoutMs?: number;
-  /** Number of retries for network errors, HTTP 429, and 5xx responses. Defaults to 3. */
+  /** Number of retry attempts for retriable auth and MPP API requests. */
   maxRetries?: number;
-  /** Initial exponential-backoff retry delay in milliseconds. Defaults to 500. */
+  /** Initial retry backoff delay in milliseconds. */
   initialRetryDelayMs?: number;
-  /** Optional logger for request, retry, auth, and payment diagnostics. */
+  /** Optional logger for auth, retry, payment, and Grantex diagnostics. */
   logger?: MppLogger;
-  /** Pre-issued bearer token. When supplied, the SDK skips client-credential exchange. */
+  /** Optional Grantex verification and payment authorization settings. */
+  grantex?: GrantexConfig;
+  /** Pre-resolved bearer token for environments that manage auth outside the SDK. */
   accessToken?: string;
-  /** Custom fetch implementation for tests or non-standard runtimes. */
+  /** Custom fetch implementation for tests, workers, or non-standard runtimes. */
   fetch?: FetchLike;
 }
 
 /** Input for `buyer.methods.createMandate`, mapped to `POST /mpp/v1/pre-authorize`. */
 export interface CreateMandateOptions {
-  /** Buyer mobile number used for SBMD mandate creation; accepts E.164 or local 10-digit format. */
+  /** Buyer mobile number in 10-digit Indian or E.164 format. */
   mobileNumber: string;
-  /** Mandate/pre-authorization amount in minor units. */
+  /** Mandate/pre-authorization amount. */
   amount: Amount;
-  /** Preferred buyer/customer reference for MPP lookups. */
+  /** Stable buyer/customer reference; preferred over `customerId`. */
   customerReference?: string;
-  /** Legacy alias used when `customerReference` is absent. */
+  /** Backwards-compatible buyer customer id fallback. */
   customerId?: string;
-  /** Optional description stored with the pre-authorization. */
+  /** Human-readable mandate description. */
   description?: string;
-  /** Optional caller metadata retained for compatibility; not required by current service contract. */
+  /** Additional metadata sent to the MPP service when supported. */
   metadata?: Record<string, string>;
-  /** Optional legacy expiry value retained for compatibility; current service uses `validityInDays`. */
+  /** Optional explicit expiry timestamp retained for compatibility. */
   expiry?: string;
-  /** Optional idempotency key for pre-authorization creation. Generated when absent. */
+  /** Idempotency key for mandate creation. */
   idempotencyKey?: string;
-  /** MPP payment type. Defaults to `SBMD`; `CRYPTO` is supported by the service contract. */
+  /** Payment rail type. Current examples use `SBMD`; other rails are future scope. */
   paymentType?: "SBMD" | "CRYPTO" | string;
-  /** Authorization validity period in days. Defaults to 7. */
+  /** Mandate validity period in days. */
   validityInDays?: number;
 }
 
@@ -176,17 +259,17 @@ export interface CreateTokenUsageLimits {
 
 /** Input for `buyer.methods.createToken`, mapped to `POST /mpp/v1/token`. */
 export interface CreateTokenOptions {
-  /** Legacy usage-limit object retained for compatibility; not sent to current `/token`. */
+  /** Legacy usage limit shape retained for compatibility; current token API only requires customer reference. */
   usageLimits?: CreateTokenUsageLimits;
-  /** Customer reference used to find the active authorization for token creation. */
+  /** Stable buyer/customer reference used to resolve the active authorization. */
   customerReference?: string;
-  /** Legacy alias used when `customerReference` is absent. */
+  /** Backwards-compatible buyer customer id fallback. */
   customerId?: string;
-  /** Local challenge correlation id retained in SDK objects; not required by current `/token`. */
+  /** Seller challenge id associated with this token, retained for compatibility. */
   challengeId?: string;
-  /** Optional caller metadata retained for compatibility; not sent to current `/token`. */
+  /** Additional token metadata retained for compatibility. */
   metadata?: Record<string, string>;
-  /** MPP payment type. Defaults to `SBMD`; `CRYPTO` is supported by the service contract. */
+  /** Payment rail type. Current examples use `SBMD`; other rails are future scope. */
   paymentType?: "SBMD" | "CRYPTO" | string;
 }
 
@@ -241,6 +324,7 @@ export class MppError extends Error {
   }
 }
 
+/** Error type raised when a network request fails before receiving an MPP response. */
 export class MppNetworkError extends Error {
   constructor(message: string, public cause?: unknown) {
     super(message);
