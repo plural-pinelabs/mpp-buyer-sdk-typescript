@@ -1,4 +1,4 @@
-# Plural P3P Buyer SDK
+# Plural P3P Client SDK
 
 TypeScript SDK for Plural P3P buyer clients. It handles HTTP
 `402 Payment Required` seller challenges, creates one-time P3P payment tokens,
@@ -8,7 +8,7 @@ retries protected requests with a `Payment` credential, and parses
 ## Install
 
 ```bash
-npm install @pine-labs-online/p3p-buyer-sdk
+npm install p3p-client-sdk
 ```
 
 Requires Node.js `>=18` or another runtime with `fetch`, `AbortSignal.timeout`,
