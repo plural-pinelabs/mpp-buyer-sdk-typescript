@@ -1,4 +1,4 @@
-import { FetchLike, MppNetworkError, PluralBuyerConfig } from "../types";
+import { FetchLike, P3PNetworkError, PluralBuyerConfig } from "../types";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -26,10 +26,10 @@ export async function requestWithRetry(
         await sleep(retryDelayMs(attempt, config.initialRetryDelayMs ?? DEFAULT_INITIAL_RETRY_DELAY_MS));
         continue;
       }
-      throw new MppNetworkError(`Network error calling ${url}`, error);
+      throw new P3PNetworkError(`Network error calling ${url}`, error);
     }
   }
-  throw new MppNetworkError(`MPP request failed: ${url}`, lastError);
+  throw new P3PNetworkError(`P3P request failed: ${url}`, lastError);
 }
 
 export async function safeJson(response: Response): Promise<unknown> {

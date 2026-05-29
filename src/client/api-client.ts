@@ -1,77 +1,62 @@
 import {
-  CreateMandateOptions,
+  Amount,
   CreateTokenOptions,
   FetchLike,
-  Mandate,
-  MppError,
+  P3PError,
   PluralBuyerConfig,
   Token,
 } from "../types";
 import { requestWithRetry, safeJson } from "../utils/http";
-import { asRecord, parseMandate, parseToken } from "../utils/parsers";
-import { normalizeMobileNumber, validateCreateMandateOptions } from "../utils/validation";
-import { AuthManager } from "./auth-manager";
+import { asRecord, parseToken } from "../utils/parsers";
+import { validateCreateTokenOptions } from "../utils/validation";
+
+const CUSTOMER_TOKEN_PATH = "/api/v1/customer/mpp/token";
 
 export class ApiClient {
   constructor(
     private config: PluralBuyerConfig,
     private baseUrl: string,
-    private auth: AuthManager,
     private fetchImpl: FetchLike,
   ) {}
 
-  /** Create an MPP mandate/pre-authorization and normalize the service response. */
-  async createMandate(options: CreateMandateOptions): Promise<Mandate> {
-    validateCreateMandateOptions(options);
-    const customerReference = options.customerReference ?? options.customerId ?? normalizeMobileNumber(options.mobileNumber);
-    const body: Record<string, unknown> = {
-      type: options.paymentType ?? "SBMD",
-      customer_reference: customerReference,
-      amount: { value: String(options.amount.value), currency: options.amount.currency },
-      validity_in_days: options.validityInDays ?? 7,
-    };
-    if (options.description) {
-      body.description = options.description;
-    }
-    const data = await this.request("POST", "/mpp/v1/pre-authorize", body, {
-      "Idempotency-Key": options.idempotencyKey ?? randomId(),
-    });
-    return parseMandate(data);
-  }
-
-  /** Fetch a mandate/pre-authorization by authorization id. */
-  async getMandate(mandateId: string): Promise<Mandate> {
-    if (!mandateId) {
-      throw new Error("mandateId is required");
-    }
-    const data = await this.request("GET", `/mpp/v1/authorization/${encodeURIComponent(mandateId)}`);
-    return parseMandate(data);
-  }
-
   /** Create a one-time payment token for an active authorization. */
   async createToken(options: CreateTokenOptions): Promise<Token> {
-    if (!options.customerReference && !options.customerId) {
-      throw new Error("CreateTokenOptions: customerReference or customerId is required");
-    }
-    const data = await this.request("POST", "/mpp/v1/token", {
-      type: options.paymentType ?? "SBMD",
-      customer_reference: options.customerReference ?? options.customerId ?? "",
-    });
+    const tokenOptions = {
+      ...options,
+    };
+    validateCreateTokenOptions(tokenOptions);
+    const customerReference = tokenOptions.customerReference ?? tokenOptions.customerId ?? "";
+    const mobileNumber = tokenOptions.mobileNumber ?? "";
+    const paymentAmount = tokenOptions.paymentAmount ?? {
+      value: tokenOptions.usageLimits!.maxAmount,
+      currency: tokenOptions.usageLimits!.currency,
+    };
+    const body: Record<string, unknown> = {
+      type: tokenOptions.paymentMethod ?? this.config.selectedPaymentMethod,
+      customer: customerPayload(customerReference, mobileNumber),
+      challenge_id: tokenOptions.challengeId,
+      payment_amount: amountPayload(paymentAmount),
+    };
+    const data = await this.request(
+      "POST",
+      CUSTOMER_TOKEN_PATH,
+      body,
+      customerKeyHeader(tokenOptions.customerKey),
+    );
     return parseToken(data);
   }
 
-  /** Authenticated MPP request wrapper that unwraps `{ data: ... }` envelopes. */
+  /** P3P request wrapper that unwraps `{ data: ... }` envelopes. */
   private async request(
     method: string,
     path: string,
     body?: unknown,
     extraHeaders: Record<string, string> = {},
+    baseUrl = this.baseUrl,
   ): Promise<unknown> {
-    const token = await this.auth.getAccessToken();
-    const response = await requestWithRetry(this.fetchImpl, `${stripSlash(this.baseUrl)}${path}`, {
+    const response = await requestWithRetry(this.fetchImpl, buildUrl(baseUrl, path), {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
         Accept: "application/json",
         ...(body !== undefined && method !== "GET" ? { "Content-Type": "application/json" } : {}),
         ...extraHeaders,
@@ -80,7 +65,7 @@ export class ApiClient {
     }, this.config);
 
     if (!response.ok) {
-      throw MppError.fromResponse(response.status, await safeJson(response));
+      throw P3PError.fromResponse(response.status, await safeJson(response));
     }
     const payload = await response.json();
     const record = asRecord(payload);
@@ -88,13 +73,29 @@ export class ApiClient {
   }
 }
 
-function randomId(): string {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 function stripSlash(value: string): string {
   return value.replace(/\/$/, "");
+}
+
+function buildUrl(baseUrl: string, path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${stripSlash(baseUrl)}${normalizedPath}`;
+}
+
+function customerPayload(_customerReference: string, mobileNumber: string): Record<string, string> {
+  return {
+    mobile_number: mobileNumber,
+  };
+}
+
+function amountPayload(amount: Amount): Record<string, unknown> {
+  return { value: amount.value, currency: amount.currency };
+}
+
+function customerKeyHeader(customerKey: string | undefined): Record<string, string> {
+  const value = customerKey?.trim();
+  return value ? { "X-Customer-Key": value } : {};
 }

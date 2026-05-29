@@ -1,7 +1,7 @@
 {
-  "name": "@plural/mpp-buyer-sdk",
+  "name": "@pine-labs-online/p3p-buyer-sdk",
   "version": "0.1.0",
-  "description": "Plural MPP Buyer SDK - x402 Machine Payments Protocol client for AI agents (TypeScript)",
+  "description": "Plural P3P Buyer SDK - Plural P3P client for AI agents (TypeScript)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
@@ -10,14 +10,14 @@
     "url": "git+https://github.com/mishrasanjeev/agentic-org.git"
   },
   "keywords": [
-    "mpp",
+    "p3p",
     "x402",
     "payment",
     "buyer",
-    "plural",
+    "pinelabs",
     "upi",
     "sbmd",
-    "machine-payments"
+    "pinelabs-payment-protocol"
   ],
   "engines": {
     "node": ">=18"
@@ -41,11 +41,6 @@
       "types": "./dist/config/index.d.ts",
       "require": "./dist/config/index.js",
       "default": "./dist/config/index.js"
-    },
-    "./grantex": {
-      "types": "./dist/grantex/index.d.ts",
-      "require": "./dist/grantex/index.js",
-      "default": "./dist/grantex/index.js"
     },
     "./types": {
       "types": "./dist/types/index.d.ts",

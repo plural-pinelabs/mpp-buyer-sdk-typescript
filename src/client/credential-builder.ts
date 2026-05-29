@@ -2,8 +2,10 @@ import {
   Challenge,
   ChallengeRequest,
   Credential,
-  MppChallengeError,
+  P3PChallengeError,
   PAYMENT_HEADER_PREFIX,
+  PaymentGateway,
+  PaymentMethod,
   Receipt,
 } from "../types";
 import { decodeJson, encodeJson, isBase64Url } from "../utils/base64url";
@@ -13,7 +15,7 @@ import { asRecord } from "../utils/parsers";
 export function decodeChallenge(wwwAuthenticateHeader: string): Challenge {
   const encoded = extractBase64Payload(wwwAuthenticateHeader);
   if (!encoded) {
-    throw new MppChallengeError("Invalid WWW-Authenticate header format", "");
+    throw new P3PChallengeError("Invalid WWW-Authenticate header format", "");
   }
   const raw = decodeJson(encoded);
   const challenge = dictToChallenge(raw);
@@ -26,7 +28,9 @@ export function buildCredential(
   challenge: Challenge,
   agentId: string,
   token: string,
+  paymentMethod: PaymentMethod,
   customerReference?: string,
+  mobileNumber?: string,
 ): Credential {
   return {
     challenge,
@@ -35,11 +39,13 @@ export function buildCredential(
       type: "token",
       token,
       customer_reference: customerReference?.trim() || undefined,
+      mobile_number: mobileNumber?.trim() || undefined,
+      payment_method: paymentMethod,
     },
   };
 }
 
-/** Encode a credential as an `Authorization: Payment <base64url>` header value. */
+/** Encode a credential as a `Payment <base64url>` header value for `P3P-Credential`. */
 export function encodeCredentialHeader(credential: Credential): string {
   const payload: Record<string, unknown> = {
     type: credential.payload.type,
@@ -48,6 +54,10 @@ export function encodeCredentialHeader(credential: Credential): string {
   if (credential.payload.customer_reference) {
     payload.customer_reference = credential.payload.customer_reference;
   }
+  if (credential.payload.mobile_number) {
+    payload.mobile_number = credential.payload.mobile_number;
+  }
+  payload.payment_method = credential.payload.payment_method;
   return `${PAYMENT_HEADER_PREFIX}${encodeJson({
     challenge: credential.challenge,
     source: credential.source,
@@ -63,9 +73,8 @@ export function decodeReceipt(paymentReceiptHeader: string): Receipt {
   }
   const raw = asRecord(decodeJson(encoded)) ?? {};
   const settlement = asRecord(raw.settlement) ?? {};
-  return {
+  const receipt: Receipt = {
     status: raw.status === "success" ? "success" : "failure",
-    method: String(raw.method ?? ""),
     timestamp: String(raw.timestamp ?? ""),
     reference: String(raw.reference ?? ""),
     challengeId: String(raw.challengeId ?? ""),
@@ -74,30 +83,42 @@ export function decodeReceipt(paymentReceiptHeader: string): Receipt {
       currency: String(settlement.currency ?? "INR"),
     },
   };
+  const paymentGateway = raw.paymentGateway ?? raw.payment_gateway;
+  const paymentMethod = raw.paymentMethod ?? raw.payment_method;
+  if (paymentGateway !== undefined) {
+    receipt.paymentGateway = parsePaymentGateway(paymentGateway);
+  }
+  if (paymentMethod !== undefined) {
+    receipt.paymentMethod = parsePaymentMethod(paymentMethod);
+  }
+  return receipt;
 }
 
 /** Validate that a decoded challenge is usable and not expired. */
 export function validateChallenge(challenge: Challenge): void {
   if (!challenge.id) {
-    throw new MppChallengeError("Challenge missing id", "");
+    throw new P3PChallengeError("Challenge missing id", "");
   }
-  if (challenge.method !== "plural") {
-    throw new MppChallengeError(`Unsupported payment method: ${challenge.method}. Expected "plural"`, challenge.id);
+  if (challenge.paymentGateway !== PaymentGateway.PineLabsOnline) {
+    throw new P3PChallengeError(`Unsupported payment gateway: ${challenge.paymentGateway}. Expected "${PaymentGateway.PineLabsOnline}"`, challenge.id);
   }
   if (!challenge.request?.amount || !challenge.request.currency) {
-    throw new MppChallengeError("Challenge missing payment request details", challenge.id);
+    throw new P3PChallengeError("Challenge missing payment request details", challenge.id);
+  }
+  if (!challenge.request.availablePaymentMethods.length) {
+    throw new P3PChallengeError("Challenge missing available payment methods", challenge.id);
   }
   const expiresMs = Date.parse(challenge.expires);
   if (!Number.isFinite(expiresMs) || expiresMs <= Date.now()) {
-    throw new MppChallengeError("Challenge has expired", challenge.id);
+    throw new P3PChallengeError("Challenge has expired", challenge.id);
   }
 }
 
-/** Return the challenge amount in paise for limit checks and token creation. */
+/** Return the challenge amount in paise for token creation. */
 export function extractAmountPaise(challenge: Challenge): number {
   const majorUnits = Number(challenge.request.amount);
   if (!Number.isFinite(majorUnits) || majorUnits <= 0) {
-    throw new MppChallengeError(`Invalid challenge amount: ${challenge.request.amount}`, challenge.id);
+    throw new P3PChallengeError(`Invalid challenge amount: ${challenge.request.amount}`, challenge.id);
   }
   return Math.round(majorUnits * 100);
 }
@@ -116,14 +137,43 @@ function dictToChallenge(raw: unknown): Challenge {
   return {
     id: String(record.id ?? ""),
     realm: String(record.realm ?? ""),
-    method: String(record.method ?? ""),
+    paymentGateway: parsePaymentGateway(record.paymentGateway ?? record.payment_gateway),
     intent: String(record.intent ?? ""),
     request: {
       scheme: String(req.scheme ?? ""),
       amount: String(req.amount ?? ""),
       currency: String(req.currency ?? ""),
       resource: String(req.resource ?? ""),
+      availablePaymentMethods: parsePaymentMethods(req.availablePaymentMethods ?? req.available_payment_methods),
     } satisfies ChallengeRequest,
     expires: String(record.expires ?? ""),
   };
+}
+
+export function selectPaymentMethod(challenge: Challenge, selectedPaymentMethod: PaymentMethod): PaymentMethod {
+  if (!challenge.request.availablePaymentMethods.includes(selectedPaymentMethod)) {
+    throw new P3PChallengeError(
+      `Selected payment method ${selectedPaymentMethod} is not accepted by this seller challenge`,
+      challenge.id,
+    );
+  }
+  return selectedPaymentMethod;
+}
+
+function parsePaymentGateway(value: unknown): PaymentGateway {
+  return value === PaymentGateway.PineLabsOnline ? PaymentGateway.PineLabsOnline : String(value ?? "") as PaymentGateway;
+}
+
+function parsePaymentMethod(value: unknown): PaymentMethod {
+  if (value === PaymentMethod.UpiSbmd || value === PaymentMethod.Crypto) {
+    return value;
+  }
+  return String(value ?? "") as PaymentMethod;
+}
+
+function parsePaymentMethods(value: unknown): PaymentMethod[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map(parsePaymentMethod);
 }

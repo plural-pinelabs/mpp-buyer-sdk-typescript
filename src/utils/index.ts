@@ -8,5 +8,6 @@ export {
   decodeReceipt,
   encodeCredentialHeader,
   extractAmountPaise,
+  selectPaymentMethod,
   validateChallenge,
 } from "../client/credential-builder";

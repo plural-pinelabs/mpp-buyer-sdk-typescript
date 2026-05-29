@@ -1,25 +1,43 @@
-import { CreateMandateOptions, PluralBuyerConfig } from "../types";
+import { isP3PEnvironment } from "../config";
+import { CreateTokenOptions, PaymentGateway, PaymentMethod, PluralBuyerConfig } from "../types";
 
 export function validateConfig(config: PluralBuyerConfig): void {
-  if (!config.clientId || !config.clientSecret) {
-    throw new Error("PluralBuyerConfig: clientId and clientSecret are required");
+  if (config.paymentGateway !== PaymentGateway.PineLabsOnline) {
+    throw new Error("PluralBuyerConfig: paymentGateway must be PaymentGateway.PineLabsOnline");
+  }
+  if (config.env !== undefined && !isP3PEnvironment(config.env)) {
+    throw new Error("PluralBuyerConfig: env must be P3PEnvironment.SANDBOX or P3PEnvironment.PRODUCTION");
+  }
+  if (!isSupportedPaymentMethod(config.selectedPaymentMethod)) {
+    throw new Error("PluralBuyerConfig: selectedPaymentMethod must be a supported payment method");
   }
 }
 
-export function validateCreateMandateOptions(options: CreateMandateOptions): void {
-  const normalized = normalizeMobileNumber(options.mobileNumber);
-  if (!options.mobileNumber || !/^\d{10}$/.test(normalized)) {
-    throw new Error("CreateMandateOptions: mobileNumber must be 10 digits or E.164 format");
+export function validateCreateTokenOptions(options: CreateTokenOptions): void {
+  const customerReference = String(options.customerReference ?? options.customerId ?? "").trim();
+  if (!customerReference) {
+    throw new Error("CreateTokenOptions: customerReference or customerId is required");
   }
-  if (!Number.isInteger(options.amount?.value) || options.amount.value < 100) {
-    throw new Error("CreateMandateOptions: amount.value must be at least 100 paise");
+  const mobileNumber = String(options.mobileNumber ?? "").trim();
+  if (!mobileNumber) {
+    throw new Error("CreateTokenOptions: mobileNumber is required");
   }
-  if (options.amount.currency !== "INR") {
-    throw new Error("CreateMandateOptions: only INR currency is supported");
+  if (!String(options.challengeId ?? "").trim()) {
+    throw new Error("CreateTokenOptions: challengeId is required");
+  }
+  const paymentValue = options.paymentAmount?.value ?? options.usageLimits?.maxAmount;
+  const paymentCurrency = options.paymentAmount?.currency ?? options.usageLimits?.currency;
+  if (!Number.isInteger(paymentValue) || Number(paymentValue) <= 0) {
+    throw new Error("CreateTokenOptions: paymentAmount.value must be a positive integer");
+  }
+  if (!paymentCurrency) {
+    throw new Error("CreateTokenOptions: paymentAmount.currency is required");
+  }
+  if (options.paymentMethod !== undefined && !isSupportedPaymentMethod(options.paymentMethod)) {
+    throw new Error("CreateTokenOptions: paymentMethod must be a supported payment method");
   }
 }
 
-export function normalizeMobileNumber(value: string): string {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  return digits.length > 10 ? digits.slice(-10) : digits;
+export function isSupportedPaymentMethod(value: unknown): value is PaymentMethod {
+  return value === PaymentMethod.UpiSbmd || value === PaymentMethod.Crypto;
 }
